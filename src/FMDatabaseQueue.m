@@ -136,16 +136,16 @@ static const void * const kDispatchQueueSpecificKey = &kDispatchQueueSpecificKey
     return _db;
 }
 
-- (void)inDatabase:(void (^)(FMDatabase *db))block {
-    /* Get the currently executing queue (which should probably be nil, but in theory could be another DB queue
-     * and then check it against self to make sure we're not about to deadlock. */
-    FMDatabaseQueue *currentSyncQueue = (__bridge id)dispatch_get_specific(kDispatchQueueSpecificKey);
-    assert(currentSyncQueue != self && "inDatabase: was called reentrantly on the same queue, which would lead to a deadlock");
-    
+- (BOOL)isInQueue {
+    return (__bridge id)dispatch_get_specific(kDispatchQueueSpecificKey) == self;
+}
+
+- (void)inDatabase:(void (^)(FMDatabase *db))block waitUntilDone:(BOOL)wait {
+
     FMDBRetain(self);
     
-    dispatch_sync(_queue, ^() {
-        
+    void(^action)() = ^() {
+
         FMDatabase *db = [self database];
         block(db);
         
@@ -160,16 +160,23 @@ static const void * const kDispatchQueueSpecificKey = &kDispatchQueueSpecificKey
             }
 #endif
         }
-    });
-    
-    FMDBRelease(self);
+        FMDBRelease(self);
+    };
+    if( wait ) {
+        if( [self isInQueue] )
+            action();
+        else
+            dispatch_sync(_queue, action);
+    }
+    else
+        dispatch_async(_queue, action);
 }
 
 
-- (void)beginTransaction:(BOOL)useDeferred withBlock:(void (^)(FMDatabase *db, BOOL *rollback))block {
+- (void)beginTransaction:(BOOL)useDeferred withBlock:(void (^)(FMDatabase *db, BOOL *rollback))block waitUntilDone:(BOOL)wait {
     FMDBRetain(self);
-    dispatch_sync(_queue, ^() { 
-        
+    void(^action)() = ^() {
+
         BOOL shouldRollback = NO;
         
         if (useDeferred) {
@@ -187,45 +194,58 @@ static const void * const kDispatchQueueSpecificKey = &kDispatchQueueSpecificKey
         else {
             [[self database] commit];
         }
-    });
-    
-    FMDBRelease(self);
+        FMDBRelease(self);
+    };
+    if( wait ) {
+        if( [self isInQueue] )
+            action();
+        else
+            dispatch_sync(_queue, action);
+    }
+    else
+        dispatch_async(_queue, action);
 }
 
-- (void)inDeferredTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block {
-    [self beginTransaction:YES withBlock:block];
+- (void)inDeferredTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block waitUntilDone:(BOOL)wait {
+    [self beginTransaction:YES withBlock:block waitUntilDone:wait];
 }
 
-- (void)inTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block {
-    [self beginTransaction:NO withBlock:block];
+- (void)inTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block waitUntilDone:(BOOL)wait {
+    [self beginTransaction:NO withBlock:block waitUntilDone:wait];
 }
 
 #if SQLITE_VERSION_NUMBER >= 3007000
-- (NSError*)inSavePoint:(void (^)(FMDatabase *db, BOOL *rollback))block {
+- (void)inSavePoint:(void (^)(FMDatabase *db, BOOL *rollback))block waitUntilDone:(BOOL)wait withError:(NSError *__autoreleasing *)error {
     
     static unsigned long savePointIdx = 0;
-    __block NSError *err = 0x00;
     FMDBRetain(self);
-    dispatch_sync(_queue, ^() { 
+    void(^action)() = ^() {
         
         NSString *name = [NSString stringWithFormat:@"savePoint%ld", savePointIdx++];
         
         BOOL shouldRollback = NO;
         
-        if ([[self database] startSavePointWithName:name error:&err]) {
+        if ([[self database] startSavePointWithName:name error:error]) {
             
             block([self database], &shouldRollback);
             
             if (shouldRollback) {
                 // We need to rollback and release this savepoint to remove it
-                [[self database] rollbackToSavePointWithName:name error:&err];
+                [[self database] rollbackToSavePointWithName:name error:error];
             }
-            [[self database] releaseSavePointWithName:name error:&err];
+            [[self database] releaseSavePointWithName:name error:error];
             
         }
-    });
-    FMDBRelease(self);
-    return err;
+        FMDBRelease(self);
+    };
+    if( wait ) {
+        if( [self isInQueue] )
+            action();
+        else
+            dispatch_sync(_queue, action);
+    }
+    else
+        dispatch_async(_queue, action);
 }
 #endif
 

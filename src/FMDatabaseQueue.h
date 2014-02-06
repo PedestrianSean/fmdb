@@ -134,21 +134,21 @@
  @param block The code to be run on the queue of `FMDatabaseQueue`
  */
 
-- (void)inDatabase:(void (^)(FMDatabase *db))block;
+- (void)inDatabase:(void (^)(FMDatabase *db))block waitUntilDone:(BOOL)wait;
 
 /** Synchronously perform database operations on queue, using transactions.
 
  @param block The code to be run on the queue of `FMDatabaseQueue`
  */
 
-- (void)inTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block;
+- (void)inTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block waitUntilDone:(BOOL)wait;
 
 /** Synchronously perform database operations on queue, using deferred transactions.
 
  @param block The code to be run on the queue of `FMDatabaseQueue`
  */
 
-- (void)inDeferredTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block;
+- (void)inDeferredTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block waitUntilDone:(BOOL)wait;
 
 ///-----------------------------------------------
 /// @name Dispatching database operations to queue
@@ -162,7 +162,7 @@
 #if SQLITE_VERSION_NUMBER >= 3007000
 // NOTE: you can not nest these, since calling it will pull another database out of the pool and you'll get a deadlock.
 // If you need to nest, use FMDatabase's startSavePointWithName:error: instead.
-- (NSError*)inSavePoint:(void (^)(FMDatabase *db, BOOL *rollback))block;
+- (void)inSavePoint:(void (^)(FMDatabase *db, BOOL *rollback))block waitUntilDone:(BOOL)wait withError:(NSError**)error;
 #endif
 
 @end

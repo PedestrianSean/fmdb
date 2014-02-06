@@ -706,7 +706,7 @@
                 idx++;
             }
             else {
-                NSLog(@"Could not find index for %@", dictionaryKey);
+                //NSLog(@"Could not find index for %@", dictionaryKey);
             }
         }
     }
@@ -883,7 +883,7 @@
                 idx++;
             }
             else {
-                NSLog(@"Could not find index for %@", dictionaryKey);
+                //NSLog(@"Could not find index for %@", dictionaryKey);
             }
         }
     }
