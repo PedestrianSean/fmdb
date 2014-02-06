@@ -136,8 +136,15 @@ static const void * const kDispatchQueueSpecificKey = &kDispatchQueueSpecificKey
     return _db;
 }
 
-- (BOOL)isInQueue {
-    return (__bridge id)dispatch_get_specific(kDispatchQueueSpecificKey) == self;
+- (void)runBlock:(void (^)())block waitUntilDone:(BOOL)wait {
+    if( wait ) {
+        if( (__bridge id)dispatch_get_specific(kDispatchQueueSpecificKey) == self )
+            block();
+        else
+            dispatch_sync(_queue, block);
+    }
+    else
+        dispatch_async(_queue, block);
 }
 
 - (void)inDatabase:(void (^)(FMDatabase *db))block waitUntilDone:(BOOL)wait {
@@ -162,14 +169,7 @@ static const void * const kDispatchQueueSpecificKey = &kDispatchQueueSpecificKey
         }
         FMDBRelease(self);
     };
-    if( wait ) {
-        if( [self isInQueue] )
-            action();
-        else
-            dispatch_sync(_queue, action);
-    }
-    else
-        dispatch_async(_queue, action);
+    [self runBlock:action waitUntilDone:wait];
 }
 
 
@@ -196,14 +196,7 @@ static const void * const kDispatchQueueSpecificKey = &kDispatchQueueSpecificKey
         }
         FMDBRelease(self);
     };
-    if( wait ) {
-        if( [self isInQueue] )
-            action();
-        else
-            dispatch_sync(_queue, action);
-    }
-    else
-        dispatch_async(_queue, action);
+    [self runBlock:action waitUntilDone:wait];
 }
 
 - (void)inDeferredTransaction:(void (^)(FMDatabase *db, BOOL *rollback))block waitUntilDone:(BOOL)wait {
@@ -238,14 +231,7 @@ static const void * const kDispatchQueueSpecificKey = &kDispatchQueueSpecificKey
         }
         FMDBRelease(self);
     };
-    if( wait ) {
-        if( [self isInQueue] )
-            action();
-        else
-            dispatch_sync(_queue, action);
-    }
-    else
-        dispatch_async(_queue, action);
+    [self runBlock:action waitUntilDone:wait];
 }
 #endif
 
